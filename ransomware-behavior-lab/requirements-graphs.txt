@@ -1,0 +1,5 @@
+# Optional: only needed for the three report graphs (PNGs).
+# The HTML report builds fine without these — graph slots show "(graph missing)".
+# Install with: pip install -r requirements-graphs.txt
+# Docker: set build arg INSTALL_GRAPHS=1 to include.
+matplotlib>=3.5

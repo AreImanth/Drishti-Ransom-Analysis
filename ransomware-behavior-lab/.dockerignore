@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+*.pyo
+.git/
+.ruff_cache/
+# Regenerated at container start / bind-mounted via compose — no need in image
+evidence/
+logs/
+reports/
+runs/
+# Docs and images are not needed to run the web UI —
+# except the company logo, which is embedded in the report.
+*.docx
+*.png
+!assets/logo.png

@@ -1,0 +1,10 @@
+# Normalize line endings; force LF for shell + Python scripts so
+# Windows checkouts can't break the Docker entrypoint or interpreters.
+* text=auto
+*.sh text eol=lf
+*.py text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.yml text eol=lf

@@ -1,0 +1,24 @@
+# Python bytecode / caches
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Ransomware lab runtime artifacts (regenerated on every run — never commit)
+ransomware-behavior-lab/evidence/baseline/*.json
+ransomware-behavior-lab/evidence/post/*.json
+ransomware-behavior-lab/evidence/post/*.txt
+ransomware-behavior-lab/logs/*.json
+ransomware-behavior-lab/logs/*.log
+ransomware-behavior-lab/reports/*.html
+ransomware-behavior-lab/reports/*.png
+ransomware-behavior-lab/reports/analysis_summary.json
+ransomware-behavior-lab/runs/*/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

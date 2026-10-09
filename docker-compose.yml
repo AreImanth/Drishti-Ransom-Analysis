@@ -1,0 +1,35 @@
+# Cybersecurity Labs — Docker Compose
+# Runs the Ransomware Behavior Lab web UI continuously.
+# Access on the LAN at http://<server-ip>:6767
+
+services:
+  ransomware-lab:
+    build:
+      context: ./ransomware-behavior-lab
+      # Graphs OFF by default (thin-link friendly). To include matplotlib:
+      #   docker compose build --build-arg INSTALL_GRAPHS=1
+      args:
+        INSTALL_GRAPHS: "0"
+    container_name: ransomware-lab
+    restart: unless-stopped
+    ports:
+      - "6767:6767"
+    environment:
+      LAB_ROOT: /data/victim
+      PORT: "6767"
+    volumes:
+      - ransomware-victim:/data/victim
+      # Persist reports/logs across container rebuilds:
+      - ./ransomware-behavior-lab/reports:/app/reports
+      - ./ransomware-behavior-lab/logs:/app/logs
+      - ./ransomware-behavior-lab/runs:/app/runs
+      - ./ransomware-behavior-lab/evidence:/app/evidence
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:6767/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  ransomware-victim:

@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Ransomware Behavior Lab</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="brand-row">
+                <img src="/logo.png" class="brand-logo" alt="Blue Cloud Softech Solutions Limited">
+                <div>
+                    <h1>Ransomware Behavior Lab</h1>
+                    <p class="subtitle">Attack &rarr; Detect &rarr; Analyze &rarr; Report</p>
+                </div>
+            </div>
+        </header>
+
+        <!-- Phase 1: Start Attack -->
+        <section class="card" id="phase-attack">
+            <h2><span class="step">1</span> Start Attack Phase</h2>
+            <p>Runs the full attack pipeline: baseline &rarr; detector &rarr; simulator &rarr; post-attack.</p>
+            <button id="btn-start" class="btn btn-primary" onclick="startAttack()">
+                Start Attack
+            </button>
+            <div id="attack-status" class="status hidden"></div>
+        </section>
+
+        <!-- Phase 2: Snapshots & Comparison (automatic) -->
+        <section class="card hidden" id="phase-compare">
+            <h2><span class="step">2</span> Snapshots &amp; Comparison (automatic)</h2>
+            <p>Snapshot 1 (baseline) and Snapshot 2 (post-attack) were taken
+            automatically during the attack phase. The comparison below was
+            generated from their diff — no Regshot needed on this server.</p>
+            <div id="compare-status" class="status hidden"></div>
+            <details>
+                <summary>Advanced: paste a Regshot comparison manually instead</summary>
+                <p style="margin:10px 0">Only needed if you took snapshots with
+                Regshot on a Windows VM and want to use that output.</p>
+                <textarea
+                    id="comparison-input"
+                    placeholder="Paste Regshot comparison.txt content here..."
+                    rows="8"
+                ></textarea>
+                <button id="btn-save-compare" class="btn btn-secondary" onclick="saveComparison()">
+                    Save Manual Comparison
+                </button>
+            </details>
+        </section>
+
+        <!-- Phase 3: Build Report -->
+        <section class="card hidden" id="phase-report">
+            <h2><span class="step">3</span> Analyze &amp; Build Report</h2>
+            <p>Generates the forensic analysis report from all collected artifacts.</p>
+            <button id="btn-report" class="btn btn-primary" onclick="buildReport()">
+                Build Report
+            </button>
+            <a id="btn-view-report" class="btn btn-secondary hidden" href="#" target="_blank" rel="noopener" style="margin-left:8px">View Report</a>
+            <div id="report-status" class="status hidden"></div>
+        </section>
+
+        <!-- Live Log -->
+        <section class="card">
+            <h2>Live Log</h2>
+            <pre id="log-output"></pre>
+        </section>
+    </div>
+
+    <script>
+        let pollInterval = null;
+        let seenLogEntries = 0;
+        let lastReportPath = null;
+
+        function showViewButton(path) {
+            lastReportPath = path;
+            const btn = document.getElementById('btn-view-report');
+            btn.href = path;
+            btn.classList.remove('hidden');
+        }
+
+        function show(id) {
+            document.getElementById(id).classList.remove('hidden');
+        }
+
+        function hide(id) {
+            document.getElementById(id).classList.add('hidden');
+        }
+
+        function setStatus(id, msg, isError = false) {
+            const el = document.getElementById(id);
+            el.textContent = msg;
+            el.className = 'status' + (isError ? ' error' : ' success');
+            el.classList.remove('hidden');
+        }
+
+        function appendLog(text) {
+            const el = document.getElementById('log-output');
+            el.textContent += text + '\n';
+            el.scrollTop = el.scrollHeight;
+        }
+
+        function startAttack() {
+            if (!confirm('This will run the full attack pipeline:\n\n- Snapshot 1 (baseline) is taken automatically\n- Detector starts, simulator runs, Snapshot 2 is taken\n- The comparison is auto-generated (no Regshot needed)\n\nClick OK to start.')) {
+                return;
+            }
+
+            document.getElementById('btn-start').disabled = true;
+            document.getElementById('log-output').textContent = '';
+            seenLogEntries = 0;
+            setStatus('attack-status', 'Attack phase started...');
+
+            fetch('/api/start_attack', { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.error) {
+                        setStatus('attack-status', data.error, true);
+                        document.getElementById('btn-start').disabled = false;
+                        return;
+                    }
+                    pollInterval = setInterval(pollStatus, 1000);
+                })
+                .catch(err => {
+                    setStatus('attack-status', 'Error: ' + err, true);
+                    document.getElementById('btn-start').disabled = false;
+                });
+        }
+
+        function pollStatus() {
+            fetch('/api/status')
+                .then(r => r.json())
+                .then(data => {
+                    // Append only entries we haven't shown yet (each array
+                    // entry can span many lines, so count entries, not lines).
+                    const newEntries = data.logs.slice(seenLogEntries);
+                    newEntries.forEach(entry => appendLog(entry));
+                    seenLogEntries = data.logs.length;
+
+                    if (data.phase === 'done') {
+                        clearInterval(pollInterval);
+                        setStatus('attack-status', 'Attack phase complete!');
+                        if (data.snapshot) {
+                            setStatus('compare-status',
+                                'Snapshots taken automatically. Comparison auto-generated: '
+                                + data.snapshot.added + ' added, '
+                                + data.snapshot.deleted + ' deleted '
+                                + '(source: ' + (data.comparison_source || 'auto') + ').');
+                        } else if (data.comparison) {
+                            setStatus('compare-status', 'Comparison ready.');
+                        } else {
+                            setStatus('compare-status',
+                                'Auto-comparison was not generated — paste a Regshot comparison below to continue.', true);
+                        }
+                        show('phase-compare');
+                        if (data.comparison) {
+                            show('phase-report');
+                        }
+                        document.getElementById('btn-start').disabled = false;
+                    } else if (data.phase === 'error') {
+                        clearInterval(pollInterval);
+                        setStatus('attack-status', 'Error: ' + (data.error || 'Unknown error'), true);
+                        document.getElementById('btn-start').disabled = false;
+                    } else {
+                        const phaseNames = {
+                            reset: 'Resetting lab to clean state...',
+                            baseline: 'Collecting baseline (Snapshot 1)...',
+                            detector: 'Detector running...',
+                            simulator: 'Ransomware simulator running...',
+                            post: 'Collecting post-attack baseline (Snapshot 2)...',
+                            compare: 'Generating snapshot comparison...',
+                        };
+                        setStatus('attack-status', phaseNames[data.phase] || 'Working...');
+                    }
+                });
+        }
+
+        function saveComparison() {
+            const text = document.getElementById('comparison-input').value.trim();
+            if (!text) {
+                setStatus('compare-status', 'Please paste the comparison text first.', true);
+                return;
+            }
+
+            fetch('/api/comparison', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ comparison: text }),
+            })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.error) {
+                        setStatus('compare-status', data.error, true);
+                    } else {
+                        setStatus('compare-status', 'Comparison saved!');
+                        show('phase-report');
+                    }
+                });
+        }
+
+        function buildReport() {
+            document.getElementById('btn-report').disabled = true;
+            setStatus('report-status', 'Building report...');
+            fetch('/api/build_report', { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.error) {
+                        setStatus('report-status', data.error, true);
+                        document.getElementById('btn-report').disabled = false;
+                    } else {
+                        setStatus('report-status', 'Report generated! Opening...');
+                        showViewButton(data.report_path);
+                        window.open(data.report_path, '_blank');
+                    }
+                })
+                .catch(err => {
+                    setStatus('report-status', 'Error: ' + err, true);
+                    document.getElementById('btn-report').disabled = false;
+                });
+        }
+
+        // If a report already exists in this server session (e.g. the tab
+        // was closed, or the page was refreshed without a server restart),
+        // offer it immediately without requiring a rebuild.
+        fetch('/api/status')
+            .then(r => r.json())
+            .then(data => {
+                if (data.report_path) {
+                    show('phase-report');
+                    showViewButton(data.report_path);
+                    setStatus('report-status', 'A generated report is available below.');
+                }
+                if (data.comparison) {
+                    show('phase-compare');
+                }
+            })
+            .catch(() => {});
+    </script>
+</body>
+</html>
